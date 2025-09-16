@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Check, ArrowLeft } from 'lucide-react';
+import { Check, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 
 interface Plan {
   id: string;
@@ -18,6 +18,7 @@ interface Plan {
   cpu: number;
   price: number;
   description: string;
+  image_url: string | null;
 }
 
 export const Order = () => {
@@ -72,29 +73,34 @@ export const Order = () => {
     setOrdering(true);
 
     try {
-      // Call the order processing edge function
-      const { data, error } = await supabase.functions.invoke('process-order', {
-        body: {
+      // Create the order first (without payment processing)
+      const { data: orderData, error: orderError } = await supabase
+        .from('server_orders')
+        .insert({
+          user_id: user.id,
           plan_id: selectedPlan.id,
           server_name: serverName.trim(),
-        },
-      });
+          status: 'pending',
+          payment_status: 'pending'
+        })
+        .select()
+        .single();
 
-      if (error) {
-        throw error;
-      }
+      if (orderError) throw orderError;
 
       toast({
-        title: "Order Submitted",
-        description: "Your server order has been submitted and is being processed.",
+        title: "Order Created",
+        description: "Please complete the payment to activate your server.",
       });
 
+      // Redirect to a payment page or show payment modal
+      // For now, we'll navigate to dashboard
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Error processing order:', error);
+      console.error('Error creating order:', error);
       toast({
         title: "Order Failed",
-        description: error.message || "Failed to process your order. Please try again.",
+        description: error.message || "Failed to create your order. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -156,9 +162,18 @@ export const Order = () => {
               >
                 <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle>{plan.name}</CardTitle>
-                      <CardDescription>{plan.description}</CardDescription>
+                    <div className="flex items-center space-x-3">
+                      {plan.image_url ? (
+                        <img src={plan.image_url} alt={plan.name} className="w-12 h-12 rounded-lg object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div>
+                        <CardTitle>{plan.name}</CardTitle>
+                        <CardDescription>{plan.description}</CardDescription>
+                      </div>
                     </div>
                     {selectedPlan?.id === plan.id && (
                       <Badge variant="default">Selected</Badge>
@@ -254,17 +269,17 @@ export const Order = () => {
                     </div>
                   </div>
 
-                  <Button
-                    onClick={handleOrderSubmit}
-                    disabled={!serverName.trim() || ordering}
-                    className="w-full"
-                  >
-                    {ordering ? 'Processing...' : 'Complete Order'}
-                  </Button>
+          <Button
+            onClick={handleOrderSubmit}
+            disabled={!serverName.trim() || ordering}
+            className="w-full"
+          >
+            {ordering ? 'Processing...' : 'Proceed to Payment'}
+          </Button>
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    Your server will be deployed automatically after order confirmation.
-                  </p>
+          <p className="text-xs text-muted-foreground text-center">
+            Your server will be deployed after payment verification and approval by our team.
+          </p>
                 </div>
               ) : (
                 <div className="text-center text-muted-foreground">

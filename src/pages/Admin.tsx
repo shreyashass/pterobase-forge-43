@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AdminPaymentManagement } from '@/components/admin/AdminPaymentManagement';
+import { AdminPlanManagement } from '@/components/admin/AdminPlanManagement';
 import { Users, Server, DollarSign, TrendingUp } from 'lucide-react';
 
 interface User {
@@ -174,6 +176,8 @@ export const Admin = () => {
       <Tabs defaultValue="orders" className="space-y-4">
         <TabsList>
           <TabsTrigger value="orders">Server Orders</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="plans">Plans</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
         </TabsList>
 
@@ -238,6 +242,14 @@ export const Admin = () => {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="payments">
+          <AdminPaymentManagement />
+        </TabsContent>
+
+        <TabsContent value="plans">
+          <AdminPlanManagement />
         </TabsContent>
 
         <TabsContent value="users">

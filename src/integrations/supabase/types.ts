@@ -143,6 +143,7 @@ export type Database = {
           description: string | null
           disk: number
           id: string
+          image_url: string | null
           is_active: boolean
           memory: number
           name: string
@@ -155,6 +156,7 @@ export type Database = {
           description?: string | null
           disk: number
           id?: string
+          image_url?: string | null
           is_active?: boolean
           memory: number
           name: string
@@ -167,6 +169,7 @@ export type Database = {
           description?: string | null
           disk?: number
           id?: string
+          image_url?: string | null
           is_active?: boolean
           memory?: number
           name?: string
@@ -209,6 +212,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          payment_status: string | null
           plan_id: string
           pterodactyl_server_id: number | null
           server_name: string | null
@@ -219,6 +223,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          payment_status?: string | null
           plan_id: string
           pterodactyl_server_id?: number | null
           server_name?: string | null
@@ -229,6 +234,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          payment_status?: string | null
           plan_id?: string
           pterodactyl_server_id?: number | null
           server_name?: string | null

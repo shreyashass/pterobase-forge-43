@@ -1,3 +1,4 @@
+// Update the order processing to only create servers for approved payments
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -37,7 +38,87 @@ serve(async (req) => {
       )
     }
 
-    const { plan_id, server_name } = await req.json()
+    const body = await req.json()
+    
+    // Handle payment approval workflow
+    if (body.approve_payment && body.order_id) {
+      console.log('Processing payment approval for order:', body.order_id)
+      
+      // Get the order details
+      const { data: order, error: orderError } = await supabaseClient
+        .from('server_orders')
+        .select('*, plans(*)')
+        .eq('id', body.order_id)
+        .single()
+
+      if (orderError || !order) {
+        console.error('Order fetch error:', orderError)
+        return new Response(
+          JSON.stringify({ error: 'Order not found' }),
+          { 
+            status: 404, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+
+      // Create server via Pterodactyl API
+      try {
+        const pterodactylResult = await createPterodactylServer(order, order.server_name)
+        
+        // Update order with Pterodactyl server ID and set status to active
+        const { error: updateError } = await supabaseClient
+          .from('server_orders')
+          .update({
+            pterodactyl_server_id: pterodactylResult.server_id,
+            status: 'active',
+            payment_status: 'approved'
+          })
+          .eq('id', order.id)
+
+        if (updateError) {
+          console.error('Error updating order:', updateError)
+        }
+
+        console.log('Server created successfully, ID:', pterodactylResult.server_id)
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            server_id: pterodactylResult.server_id,
+            message: 'Server created and activated successfully'
+          }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+        
+      } catch (pteroError) {
+        console.error('Pterodactyl API error:', pteroError)
+        
+        // Update order status to failed
+        await supabaseClient
+          .from('server_orders')
+          .update({ status: 'failed' })
+          .eq('id', order.id)
+
+        return new Response(
+          JSON.stringify({ 
+            error: 'Server creation failed',
+            order_id: order.id,
+            message: 'Payment approved but server deployment failed'
+          }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+    }
+
+    // Original order creation logic (without auto server creation)
+    const { plan_id, server_name } = body
     
     if (!plan_id || !server_name) {
       return new Response(
@@ -49,16 +130,17 @@ serve(async (req) => {
       )
     }
 
-    console.log('Processing order for user:', user.id, 'Plan:', plan_id, 'Server:', server_name)
+    console.log('Creating order for user:', user.id, 'Plan:', plan_id, 'Server:', server_name)
 
-    // Create the server order in database
+    // Create the server order in database (without auto server creation)
     const { data: order, error: orderError } = await supabaseClient
       .from('server_orders')
       .insert({
         user_id: user.id,
         plan_id: plan_id,
         server_name: server_name,
-        status: 'pending'
+        status: 'pending',
+        payment_status: 'pending' // Wait for payment approval
       })
       .select()
       .single()
@@ -74,55 +156,13 @@ serve(async (req) => {
       )
     }
 
-    console.log('Order created:', order.id)
-
-    // Call Pterodactyl API to create server (placeholder implementation)
-    try {
-      const pterodactylResult = await createPterodactylServer(order, server_name)
-      
-      // Update order with Pterodactyl server ID and set status to active
-      const { error: updateError } = await supabaseClient
-        .from('server_orders')
-        .update({
-          pterodactyl_server_id: pterodactylResult.server_id,
-          status: 'active'
-        })
-        .eq('id', order.id)
-
-      if (updateError) {
-        console.error('Error updating order:', updateError)
-        // Don't return error here as server was created
-      }
-
-      console.log('Server created successfully, ID:', pterodactylResult.server_id)
-      
-    } catch (pteroError) {
-      console.error('Pterodactyl API error:', pteroError)
-      
-      // Update order status to failed
-      await supabaseClient
-        .from('server_orders')
-        .update({ status: 'failed' })
-        .eq('id', order.id)
-
-      return new Response(
-        JSON.stringify({ 
-          error: 'Server creation failed',
-          order_id: order.id,
-          message: 'Order was created but server deployment failed'
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
+    console.log('Order created:', order.id, '- Waiting for payment approval')
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         order_id: order.id,
-        message: 'Server order processed successfully'
+        message: 'Order created successfully - Please complete payment for server activation'
       }),
       { 
         status: 200, 
@@ -181,11 +221,11 @@ async function createPterodactylServer(order: any, serverName: string) {
         VANILLA_VERSION: 'latest'
       },
       limits: {
-        memory: 1024, // Based on plan
+        memory: order.plans.memory, // Based on plan
         swap: 0,
-        disk: 5120, // Based on plan
+        disk: order.plans.disk * 1024, // Convert GB to MB
         io: 500,
-        cpu: 100 // Based on plan
+        cpu: order.plans.cpu // Based on plan
       },
       feature_limits: {
         databases: 1,
